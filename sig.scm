@@ -83,6 +83,9 @@
 
 ;; ------------ utilities
 
+(define* (sig/errmsg formatstr . args)
+  (apply format (current-error-port) formatstr args))
+
 (define (sig/absolute-path? name)
   "Return true if NAME is an absolute path"
   (absolute-file-name? name))
@@ -145,8 +148,7 @@ removed."
     (rmdir name)
     (+ result 1))
   (define (error name stat errno result)
-    (format (current-error-port)
-            "Error: ~a: ~a~%" name (strerror errno))
+    (sig/errmsg "Error: ~a: ~a~%" name (strerror errno))
     result)
   (format #t "Delete ~a recursively … ~%" dir)
   (let ((n (file-system-fold enter? leaf none up none error 0 dir)))
@@ -221,7 +223,7 @@ KEYS."
              (if (equal? (system cmd) 0)
                  newpath
                  (begin
-                   (format (current-error-port) "Failed to download ~a!~%" resource)
+                   (sig/errmsg "Failed to download ~a!~%" resource)
                    (throw 'download-failed)))))
           (#t resource))))
 
@@ -343,10 +345,8 @@ path."
         (when overlay
           (if (file-exists? overlay)
               (system composite)
-              (format (current-error-port)
-                      "Overlay image does not exist: ~a~%" overlay)))
-        (format (current-error-port)
-                "Cannot create video thumbnail from ~a~%" filename))))
+              (sig/errmsg "Overlay image does not exist: ~a~%" overlay)))
+        (sig/errmsg "Cannot create video thumbnail from ~a~%" filename))))
 
 (define* ((sig/do-file! size thumbsize overwrite) props)
   "Create a thumbnail and resized version of the given image."
@@ -392,15 +392,13 @@ gets javascript and css resources."
 (define* (sig/make-check! directory original #:optional (create-gallery? #t))
   "Check directory if a make would make sense."
   (when (sig/empty-dir? (sig/path directory original))
-    (format (current-error-port) "ERROR: There is no folder '~a' containing images.~%" original)
+    (sig/errmsg "ERROR: There is no folder '~a' containing images.~%" original)
     (throw 'no-images))
   (when (not (sig/sig-directory? directory))
     (if create-gallery?
         (begin
-          (format (current-error-port)
-                  "WARNING: The directory ~a does not seem to be a gallery directory." directory)
-          (format (current-error-port)
-                  "Creating one via `sig create'.~%")
+          (format #t "The directory ~a does not seem to be a gallery directory." directory)
+          (format #t "Creating one via `sig create'.~%")
           (sig/create! directory))
         (throw 'not-a-gallery-dir))))
 
@@ -545,11 +543,59 @@ creating thumbnails. Return a list of image properties."
 
 ;; --- commands
 
+;; makeing new commands: the doc string is displayed to the user via
+;; the help command. the first sentence should be some short (~ 50
+;; chars) summary. After that no limits…
+
+(define *sig/commands*
+  '("help" "create" "make-all" "make-html" "version"))
+
+(define (sig/find-command name)
+  (if (member name *sig/commands*)
+      (module-symbol-binding
+       (current-module)
+       (string->symbol (string-append "main-" name)))
+      #f))
+
+(define (sig/command-help cmd)
+  (cond ((procedure? cmd)
+         (procedure-documentation cmd))
+        ((string? cmd)
+         (let ((proc (sig/find-command cmd)))
+           (and proc (procedure-documentation proc))))))
+
+(define (main-version args)
+  "Display the version and a list of commands."
+  (sig/version)
+  (newline)
+  (display "Commands: ")
+  (for-each (lambda (c) (format #t "~a " c)) *sig/commands*)
+  (newline))
+
 (define (main-create args)
+  "Creates a new gallery outline.
+
+Creates a new gallery outline in the directory specified by the first
+argument. If omitted, the current directory is used. The folders
+'images', 'thumbnails' and 'resources' are created. The 'resources'
+folder is populated with javascript and css files.
+
+The gallery can then be created using 'sig make-all'."
   (let ((len (length args)))
     (sig/create! (if (> len 1) (cadr args) "."))))
 
-(define (main-make args)
+(define (main-make-all args)
+  "Creates the gallery by processing given images.
+
+--name gallery-name (-n)   the title of the html file
+--thumbsize size (-t)      the thumbnail size (default is 150)
+--size size (-s)           the image size (default is 1200)
+--in dir (-i)              the directory with image files (default is
+                           'original')
+--overwrite (-o)           all existing files are overwritten, default
+                           is to only write new files
+
+After image/video files have been processed, the html file is generated."
   (define option-spec
     '((thumbsize (single-char #\t) (value #t))
       (imgsize   (single-char #\s) (value #t))
@@ -569,7 +615,16 @@ creating thumbnails. Return a list of image properties."
                     (sig/make-html "resources" props gallery))
     (display "Done.\n")))
 
-(define (main-html args)
+(define (main-make-html args)
+  "Generates the html file only.
+
+It assumes that image/video files have been processed already and exist
+in 'images' and 'thumbnails', respectively.
+
+--name gallery-name (-n)   the title of the html file
+--in dir (-i)              the directory with image files (default is
+                           'original')
+"
   (define option-spec
     '((in        (single-char #\i) (value #t))
       (name      (single-char #\n) (value #t))))
@@ -580,23 +635,49 @@ creating thumbnails. Return a list of image properties."
     (sig/write-file! "index.html"
                      (sig/make-html (sig/path "resources") props gallery))))
 
+(define (sig/first-sentence str)
+  (let ((idx (and str (string-index str #\.))))
+    (if idx
+        (string-take str (1+ idx))
+        "Not documented.")))
+
 (define (main-help args)
-  (display "Not implemented, sorry.\n"))
+  "Displays some help text."
+  (let* ((cmd  (and (not (null? (cdr args)))
+                    (sig/find-command (cadr args)))))
+    (if (null? (cdr args))
+        (begin
+          (sig/version)
+          (newline)
+          (newline)
+          (display "This script creates a html file containing an image gallery from\n")
+          (display "images of a given folder. Images are resized and thumbnails are\n")
+          (display "created. Video failes are supported, too. They are converted into\n")
+          (display "webm files, which I think can be played with most browsers.\n")
+          (newline)
+          (display "The script expects a command which in turn may be configured with\n")
+          (display "options. These commands are:\n")
+          (newline)
+          (for-each (lambda (c)
+                      (format #t "~a~c~c~a~%"
+                              c #\tab
+                              (if (< (string-length c) 8) #\tab #\nul)
+                              (sig/first-sentence (sig/command-help c))))
+                    *sig/commands*)
+          (newline)
+          (display "Please type `help <cmd>' for more help about each command.\n")
+          (newline))
+        (if cmd
+            (format #t "~a~%" (sig/command-help cmd))
+            (format #t "Unknown command: ~a~%" (cadr args))))))
 
 (define (main args)
-  (sig/version)
-  (newline)
   (let* ((len (length (cdr args)))
-         (action (if (> len 0) (cadr args) "")))
-    (cond ((equal? 0 len)
-           (format (current-error-port) "No arguments given. Try `help'.~%"))
-          ((equal? action "create")
-           (main-create (cdr args)))
-          ((equal? action "make")
-           (main-make (cdr args)))
-          ((equal? action "html")
-           (main-html (cdr args)))
-          ((equal? action "help")
-           (main-help (cdr args)))
-          (#t (format (current-error-port)
-                      "Unknown action: ~a. Try `help'.~%" action)))))
+         (action (if (> len 0) (cadr args) ""))
+         (cmd (sig/find-command action))
+         (helphelp (format #f "Try `~a help'." (car args))))
+    (if (equal? 0 len)
+        (sig/errmsg "No arguments given. ~a~%" helphelp)
+        (if cmd
+            (cmd (cdr args))
+            (sig/errmsg "Unknown action: ~a. ~a~%" action helphelp)))))

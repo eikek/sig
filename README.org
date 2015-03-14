@@ -26,30 +26,60 @@ and I didn't test it with others.
 You need a folder with images. Then
 
 #+begin_src shell
-mkdir mygallery && cd mygallery
-sig make -in /path/to/images
+$ mkdir mygallery && cd mygallery
+$ sig make-all -in /path/to/images
+$ firefox index.html
 #+end_src
 
-This creates a gallery in the current directory. Make allows some more
-switches:
+The =make-all= commands creates the gallery given a folder with
+images. More commands are shown below.
 
-** sig make
+# -- generated doc
+** create
 
-Creates the gallery by resizing images and generating the html file.
+Creates a new gallery outline.
 
-- =-n gallery-name= specifies the title of the html file
-- =-t size= specifies the thumbnail size (default is 150)
-- =-s size= specifies the image size (default is 1200)
-- =-i dir= specifies the directory with image files (default is
-  'original')
+Creates a new gallery outline in the directory specified by the first
+argument. If omitted, the current directory is used. The folders
+'images', 'thumbnails' and 'resources' are created. The 'resources'
+folder is populated with javascript and css files.
 
-** sig html
+The gallery can then be created using 'sig make-all'.
 
-Only generates the html file from a list of images.
+** help
 
-- =-n gallery-name= specifies the title of the html file
-- =-i dir= specifies the directory with image files (default is
-  'original')
+Displays some help text.
+
+** make-all
+
+Creates the gallery by processing given images.
+
+- =--name gallery-name (-n)= the title of the html file
+- =--thumbsize size (-t)= the thumbnail size (default is 150)
+- =--size size (-s)= the image size (default is 1200)
+- =--in dir (-i)= the directory with image files (default is
+                           'original')
+- =--overwrite (-o)= all existing files are overwritten, default
+                           is to only write new files
+
+After image/video files have been processed, the html file is generated.
+
+** make-html
+
+Generates the html file only.
+
+It assumes that image/video files have been processed already and exist
+in 'images' and 'thumbnails', respectively.
+
+- =--name gallery-name (-n)= the title of the html file
+- =--in dir (-i)= the directory with image files (default is
+                           'original')
+
+
+** version
+
+Display the version and a list of commands.
+
 
 * Not implemented
 
