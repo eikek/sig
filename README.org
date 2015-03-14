@@ -1,0 +1,92 @@
+#+TITLE: simple image gallery
+
+This script is a static html image gallery generator in scheme. It
+takes a folder with images (and/or videos) and generates a html file
+with an image gallery. The images are resized and thumbnails are
+created. Videos are all converted to webm files. The images are sorted
+by their timestamp, where the exif date-time value is used if
+available and otherwise the file last modification timestamp.
+
+* Setup
+
+Some external programs are needed:
+
+- [[http://curl.haxx.se/][curl]] (to download all the css and js files)
+- convert ([[http://imagemagick.org/][imagemagick]] or [[http://www.graphicsmagick.org/][graphicsmagick]])
+- [[http://www.sentex.net/~mwandel/jhead/][jhead]]
+- [[http://ffmpeg.org/][ffmpeg]]
+
+ffmpeg is only used to convert video files.
+
+Then a scheme compiler is needed to run the script. I'm using [[https://www.gnu.org/software/guile/][guile]]
+and I didn't test it with others.
+
+* Usage
+
+You need a folder with images. Then
+
+#+begin_src shell
+mkdir mygallery && cd mygallery
+sig make -in /path/to/images
+#+end_src
+
+This creates a gallery in the current directory. Make allows some more
+switches:
+
+** sig make
+
+Creates the gallery by resizing images and generating the html file.
+
+- =-n gallery-name= specifies the title of the html file
+- =-t size= specifies the thumbnail size (default is 150)
+- =-s size= specifies the image size (default is 1200)
+- =-i dir= specifies the directory with image files (default is
+  'original')
+
+** sig html
+
+Only generates the html file from a list of images.
+
+- =-n gallery-name= specifies the title of the html file
+- =-i dir= specifies the directory with image files (default is
+  'original')
+
+* Not implemented
+
+- render a play button ontop of the video thumbnails
+- find image files recursively in subdirs
+- download button for original image (only if relative path)
+- make external commands configurable (to add other switches etc)
+- custom css, js files
+- custom html snippets before and after the gallery
+- custom image title format
+- package command (create zip file)
+
+* Credits
+
+This script only composes great work of others:
+
+- [[https://github.com/blueimp/Gallery][Gallery]] and [[https://github.com/blueimp/Bootstrap-Image-Gallery][Bootstrap Image Gallery]] makes the image gallery (html,
+  css and javascript)
+- [[http://getbootstrap.com][bootstrap]] for styling
+- software mentioned above
+
+
+* License
+
+Copyrighted by me, distributed under GPLv3 or later.
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 3, or (at your option)
+any later version.
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with GNU Emacs; see the file COPYING. If not, write to the Free
+Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.
