@@ -53,7 +53,6 @@ Only generates the html file from a list of images.
 
 * Not implemented
 
-- render a play button ontop of the video thumbnails
 - find image files recursively in subdirs
 - download button for original image (only if relative path)
 - make external commands configurable (to add other switches etc)

@@ -71,6 +71,7 @@
 
 (define *sig/curl* "curl")
 (define *sig/convert* "convert")
+(define *sig/composite* "composite")
 (define *sig/jhead* "jhead")
 (define *sig/ffmpeg* "ffmpeg")
 
@@ -324,13 +325,21 @@ path."
     (when (not (equal? ext "webm"))
       (system ffmpeg))))
 
-(define* (sig/video-thumbnail! filename out #:optional (size 150))
+(define* (sig/video-thumbnail! filename out #:optional (size 150) overlay)
   (let ((ffmpeg (format #f "~a -loglevel quiet -y -i ~a -an -ss 4 -s ~dx~d ~a"
                          *sig/ffmpeg*
                          filename
                          size size
-                         out)))
-    (system ffmpeg)))
+                         out))
+        (composite (format #f "~a -gravity center ~a ~a ~a"
+                              *sig/composite* (or overlay "") out out)))
+    (system ffmpeg) ;; exits non-zero but file is there and looks good
+    (if (file-exists? out)
+        (when overlay
+          (if (file-exists? overlay)
+              (system composite)
+              (format (current-error-port) "Overlay image does not exist: ~a~%" overlay)))
+        (format (current-error-port) "Cannot create video thumbnail from ~a~%" filename))))
 
 (define* ((sig/do-file! size thumbsize) props)
   "Create a thumbnail and resized version of the given image."
@@ -348,7 +357,7 @@ path."
            ;;ffmpeg it into imagedir
            (sig/convert-video! filename imgpath)
            ;;get a image from video and put it in thumbdir
-           (sig/video-thumbnail! imgpath thumbpath thumbsize))
+           (sig/video-thumbnail! imgpath thumbpath thumbsize (sig/path directory "resources" "img" "video-play.png")))
           (#t (format #t "~a: Don't know what to do with file.~%" filename)))
     (display ".")
     props))
