@@ -78,9 +78,10 @@
 (define (sig/resources key)
   (assq-ref *sig/resource-list* key))
 
+(define (sig/version)
+  (display "sig 0.1.0a"))
 
 ;; ------------ utilities
-
 
 (define (sig/absolute-path? name)
   "Return true if NAME is an absolute path"
@@ -125,6 +126,10 @@
   (let ((contents (scandir dir)))
     (or (not contents)
         (equal? 2 (length contents)))))
+
+(define (sig/delete-existing-file! filename)
+  (when (file-exists? filename)
+    (delete-file filename)))
 
 (define (sig/delete-rec! dir)
   "Deletes DIR recursively. Return the number of files and directories
@@ -338,10 +343,12 @@ path."
         (when overlay
           (if (file-exists? overlay)
               (system composite)
-              (format (current-error-port) "Overlay image does not exist: ~a~%" overlay)))
-        (format (current-error-port) "Cannot create video thumbnail from ~a~%" filename))))
+              (format (current-error-port)
+                      "Overlay image does not exist: ~a~%" overlay)))
+        (format (current-error-port)
+                "Cannot create video thumbnail from ~a~%" filename))))
 
-(define* ((sig/do-file! size thumbsize) props)
+(define* ((sig/do-file! size thumbsize overwrite) props)
   "Create a thumbnail and resized version of the given image."
   (let* ((filename (assq-ref props #:file-name))
          (basename (assq-ref props #:base-name))
@@ -349,19 +356,25 @@ path."
          (directory (assq-ref props #:directory))
          (thumbpath (assq-ref props #:thumbnail))
          (imgpath (assq-ref props #:image)))
+    (when overwrite
+               (sig/delete-existing-file! imgpath)
+               (sig/delete-existing-file! thumbpath))
     (cond ((eq? media 'image)
            (begin
-             (sig/resize-image! filename imgpath size)
-             (sig/make-thumbnail! imgpath thumbpath thumbsize)))
+             (when (not (file-exists? imgpath))
+               (sig/resize-image! filename imgpath size))
+             (when (not (file-exists? thumbpath))
+               (sig/make-thumbnail! imgpath thumbpath thumbsize))))
           ((eq? media 'video)
-           ;;ffmpeg it into imagedir
-           (sig/convert-video! filename imgpath)
-           ;;get a image from video and put it in thumbdir
-           (sig/video-thumbnail! imgpath thumbpath thumbsize (sig/path directory "resources" "img" "video-play.png")))
+           (begin
+             (when (not (file-exists? imgpath))
+               (sig/convert-video! filename imgpath))
+             (when (not (file-exists? thumbpath))
+               (sig/video-thumbnail! imgpath thumbpath thumbsize
+                                     (sig/path directory "resources" "img" "video-play.png")))))
           (#t (format #t "~a: Don't know what to do with file.~%" filename)))
     (display ".")
     props))
-
 
 (define (sig/create! directory)
   "Creates a new gallery outline. This creates several directories and
@@ -518,13 +531,13 @@ gets javascript and css resources."
        (let ((files (scandir original sig/supported-file?)))
          (or files '()))))
 
-(define* (sig/make-images! directory #:optional original (thumbsize 150) (imgsize 1200))
+(define* (sig/make-images! directory #:optional original (thumbsize 150) (imgsize 1200) (overwrite #f))
   "Make the gallery by resizing images from directory ORIGINAL and
 creating thumbnails. Return a list of image properties."
   (sig/make-check! directory original)
   (format #t "Creating gallery from images in ~a~%" original)
   (let* ((orgdir (or original (sig/path directory "original")))
-         (dowork (compose (sig/do-file! imgsize thumbsize)
+         (dowork (compose (sig/do-file! imgsize thumbsize overwrite)
                           (sig/image-properties directory)))
          (work (map (sig/as-future dowork) (sig/scandir orgdir))))
     (map touch work)))
@@ -541,6 +554,7 @@ creating thumbnails. Return a list of image properties."
     '((thumbsize (single-char #\t) (value #t))
       (imgsize   (single-char #\s) (value #t))
       (name      (single-char #\n) (value #t))
+      (overwrite (single-char #\o) (value #f))
       (in        (single-char #\i) (value #t))))
   (let* ((opts  (getopt-long args option-spec))
          (dir   (option-ref opts 'in "original"))
@@ -549,7 +563,8 @@ creating thumbnails. Return a list of image properties."
          (thsz  (or (string->number (option-ref opts 'thumbsize "150"))
                     150))
          (gallery (option-ref opts 'name "Gallery"))
-         (props (sig/make-images! "." dir thsz size)))
+         (overwr  (option-ref opts 'overwrite #f))
+         (props (sig/make-images! "." dir thsz size overwr)))
     (sig/write-file! "index.html"
                     (sig/make-html "resources" props gallery))
     (display "Done.\n")))
@@ -569,6 +584,8 @@ creating thumbnails. Return a list of image properties."
   (display "Not implemented, sorry.\n"))
 
 (define (main args)
+  (sig/version)
+  (newline)
   (let* ((len (length (cdr args)))
          (action (if (> len 0) (cadr args) "")))
     (cond ((equal? 0 len)
