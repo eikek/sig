@@ -27,7 +27,7 @@ You need a folder with images. Then
 
 #+begin_src shell
 $ mkdir mygallery && cd mygallery
-$ sig make-all -in /path/to/images
+$ sig make-all -i /path/to/images
 $ firefox index.html
 #+end_src
 
@@ -46,6 +46,25 @@ folder is populated with javascript and css files.
 
 The gallery can then be created using 'sig make-all'.
 
+** create-template
+
+Create a minimal html template file.
+
+Sig allows to take a custom html file and replace certain placeholders
+with image gallery components:
+
+- =${sig-js}= javascript files
+- =${sig-head}= things that should go in html-head section (css
+                 stylesheets)
+- =${sig-box}= html snippets for the modal dialog (this should be a
+                 direct child of the html-body element)
+- =${sig-links}= the list of links to the images (this should be inside
+                 bootstrap's content div)
+
+By default a very basic html template is used. This command writes the
+default template in a file 'index-template.html for modifying it. Note
+that sig replaces the whole line containing such a variable.
+
 ** help
 
 Displays some help text.
@@ -54,7 +73,7 @@ Displays some help text.
 
 Creates the gallery by processing given images.
 
-- =--name gallery-name (-n)= the title of the html file
+- =--html template (-h)= a html template file to use
 - =--thumbsize size (-t)= the thumbnail size (default is 150)
 - =--size size (-s)= the image size (default is 1200)
 - =--in dir (-i)= the directory with image files (default is
@@ -71,9 +90,9 @@ Generates the html file only.
 It assumes that image/video files have been processed already and exist
 in 'images' and 'thumbnails', respectively.
 
-- =--name gallery-name (-n)= the title of the html file
+- =--html template (-h)= a html template file to use
 - =--in dir (-i)= the directory with image files (default is
-                           'original')
+                       'original')
 
 
 ** version
@@ -86,9 +105,6 @@ Display the version and a list of commands.
 - find image files recursively in subdirs
 - download button for original image (only if relative path)
 - make external commands configurable (to add other switches etc)
-- custom css, js files
-- custom html snippets before and after the gallery
-- custom image title format
 - package command (create zip file)
 
 * Credits

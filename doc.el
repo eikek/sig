@@ -5,9 +5,9 @@
 (defun sig--text-split (cmd)
   (let* ((raw (split-string (shell-command-to-string (concat "sig help " cmd)) "\n"))
          (lines (-map (lambda (line)
-                        (if (string-prefix-p "--" line)
+                        (if (string-match-p "^\\(  \\|--\\)[^ ]+" line)
                             (let ((cols (s-split-up-to "   +" line 2)))
-                              (concat "- =" (car cols) "= " (cadr cols)))
+                              (concat "- =" (s-trim (car cols)) "= " (cadr cols)))
                           line))
                       raw)))
     lines))
@@ -18,7 +18,7 @@
     (-each cmds
       (lambda (c)
         (insert "** " c "\n\n")
-        (insert (s-join "\n" (sig-text-split c)))
+        (insert (s-join "\n" (sig--text-split c)))
         (insert "\n")))))
 
 (defun sig--remove-help ()
@@ -36,5 +36,5 @@
     (unless (and (eq major-mode 'org-mode)
                  (looking-at "^#\\+TITLE: simple image gallery$"))
       (user-error "Not the correct file."))
-    (sig-remove-help)
-    (sig-insert-help)))
+    (sig--remove-help)
+    (sig--insert-help)))

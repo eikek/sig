@@ -78,8 +78,62 @@
 (define (sig/resources key)
   (assq-ref *sig/resource-list* key))
 
+(define *sig/template* "<html>
+  <head>
+    <title>Gallery</title>
+    <meta charset=\"utf-8\">
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+    <!-- ${sig-head} -->
+  </head>
+  <body>
+    <!-- ${sig-box} -->
+    <div class=\"container\">
+      <h1>Gallery</h1>
+      <!-- ${sig-links} -->
+    </div>
+    <!-- ${sig-js} -->
+  </body>
+</html> ")
+
+(define *sig/template-lightbox*
+  "<div id=\"blueimp-gallery\" class=\"blueimp-gallery\" data-use-bootstrap-modal=\"false\">
+  <!-- The container for the modal slides -->
+  <div class=\"slides\"></div>
+  <!-- Controls for the borderless lightbox -->
+  <h3 class=\"title\"></h3>
+  <a class=\"prev\">&#8249;</a>
+  <a class=\"next\">&#8250;</a>
+  <a class=\"close\">&times;</a>
+  <a class=\"play-pause\"></a>
+  <ol class=\"indicator\"></ol>
+  <!-- The modal dialog, which will be used to wrap the lightbox content -->
+  <div class=\"modal fade\">
+    <div class=\"modal-dialog\">
+      <div class=\"modal-content\">
+        <div class=\"modal-header\">
+          <button type=\"button\" class=\"close\" aria-hidden=\"true\">&times;</button>
+          <h4 class=\"modal-title\"></h4>
+        </div>
+        <div class=\"modal-body next\"></div>
+        <div class=\"modal-footer\">
+          <button type=\"button\" class=\"btn btn-default pull-left prev\">
+            <i class=\"glyphicon glyphicon-chevron-left\"></i>
+            Previous
+          </button>
+          <button type=\"button\" class=\"btn btn-primary next\">
+            Next
+            <i class=\"glyphicon glyphicon-chevron-right\"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>")
+
 (define (sig/version)
   (display "sig 0.1.0a"))
+
+(fluid-set! %default-port-encoding "UTF-8")
 
 ;; ------------ utilities
 
@@ -452,70 +506,60 @@ gets javascript and css resources."
             (assq-ref props #:thumbnail)
             (sig/make-image-title props))))
 
-(define* (sig/make-html resourcedir props #:optional (title "Gallery"))
-  (define (make-js p) (format #f "<script src=\"~a\"></script>" p))
-  (define (make-css p) (format #f "<link rel=\"stylesheet\" href=\"~a\"/>" p))
-  (let* ((out (sig/path resourcedir ".." "index.html"))
-         (js  (map (compose make-js
-                            (sig/make-resource-path resourcedir "js"))
-                   (sig/resources #:js)))
-         (css (map (compose make-css
-                            (sig/make-resource-path resourcedir "css"))
-                   (sig/resources #:css)))
-         (links (map sig/make-html-snippet (sig/sort-properties props))))
+(define* ((sig/html-map-line! replacements) line)
+  (define (loop lst)
+    (if (null? lst)
+        line
+        (let ((head (car lst))
+              (tail (cdr lst)))
+          (if (string-contains line (car head))
+              (cdr head) (loop tail)))))
+  (loop replacements))
+
+(define (sig/html-map-template! converter)
+  "Read the template from port and applies the line conversions. Write
+the result to current-output-port."
+  (let ((line (car (%read-line (current-input-port)))))
+    (when (not (eof-object? line))
+      (display (converter line))
+      (newline)
+      (sig/html-map-template! converter))))
+
+(define (sig/make-resource-links resourcedir type)
+  "Create a string containing <script/> or <link/> html snippets to
+resources. TYPE may be either #:js or #:css."
+  (let ((make-js (lambda (p) (format #f "<script src=\"~a\"></script>" p)))
+        (make-css (lambda (p) (format #f "<link rel=\"stylesheet\" href=\"~a\"/>" p)))
+        (typename (symbol->string (keyword->symbol type))))
+    (string-join
+     (map (compose (if (eq? type #:js) make-js make-css)
+                   (sig/make-resource-path resourcedir typename))
+          (sig/resources type))
+     "\n")))
+
+(define* (sig/gen-html resourcedir props #:optional template)
+  "Generates the html file containing the image gallery. PROPS is a
+list of property list each representing a image/video file. Optionally
+a template html file can be specified. If TEMPLATE is not a file, it
+is assumed to be the template string."
+  (let ((templ (or template *sig/template*))
+        (out (sig/path resourcedir ".." "index.html"))
+        (replacements
+         `(("${sig-js}" . ,(sig/make-resource-links resourcedir #:js))
+           ("${sig-head}" . ,(sig/make-resource-links resourcedir #:css))
+           ("${sig-box}" . ,*sig/template-lightbox*)
+           ("${sig-links}" . ,(string-join
+                               (map sig/make-html-snippet (sig/sort-properties props)) "\n")))))
     (with-output-to-string
-      (lambda ()
-        (display "<html>\n  <head>\n")
-        (format #t "    <title>~a</title>~%" title)
-        (display "    <meta charset=\"utf-8\">\n")
-        (display "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />")
-        (newline)
-        (display (string-join css "\n"))
-        (newline)
-        (display "</head>\n  <body>\n")
-        (display "    <!-- The Bootstrap Image Gallery lightbox, should be a child element of the document body -->
-    <div id=\"blueimp-gallery\" class=\"blueimp-gallery\" data-use-bootstrap-modal=\"false\">
-      <!-- The container for the modal slides -->
-      <div class=\"slides\"></div>
-      <!-- Controls for the borderless lightbox -->
-      <h3 class=\"title\"></h3>
-      <a class=\"prev\">&#8249;</a>
-      <a class=\"next\">&#8250;</a>
-      <a class=\"close\">&#215;</a>
-      <a class=\"play-pause\"></a>
-      <ol class=\"indicator\"></ol>
-      <!-- The modal dialog, which will be used to wrap the lightbox content -->
-      <div class=\"modal fade\">
-        <div class=\"modal-dialog\">
-          <div class=\"modal-content\">
-            <div class=\"modal-header\">
-              <button type=\"button\" class=\"close\" aria-hidden=\"true\">&times;</button>
-              <h4 class=\"modal-title\"></h4>
-            </div>
-            <div class=\"modal-body next\"></div>
-              <div class=\"modal-footer\">
-                <button type=\"button\" class=\"btn btn-default pull-left prev\">
-                  <i class=\"glyphicon glyphicon-chevron-left\"></i>
-                  Previous
-                </button>
-                <button type=\"button\" class=\"btn btn-primary next\">
-                  Next
-                  <i class=\"glyphicon glyphicon-chevron-right\"></i>
-                </button>
-              </div>
-            </div>
-          </div>
-      </div>
-    </div>
-    <div class=\"container\">\n")
-        (format #t "  <h1>~a</h1>~%" title)
-        (display "  <div id=\"links\">\n")
-        (display (string-join links "\n"))
-        (newline)
-        (display "  </div>\n</div>\n")
-        (display (string-join js "\n"))
-        (newline)
-        (display "  </body>\n</html>")))))
+      (lambda()
+        (if (file-exists? templ)
+            (with-input-from-file templ
+              (lambda ()
+                (sig/html-map-template! (sig/html-map-line! replacements))))
+            (with-input-from-string templ
+              (lambda ()
+                (sig/html-map-template! (sig/html-map-line! replacements)))))))))
+
 
 (define (sig/write-file! name contents)
   (format #t "~%Writing file ~a~%" name)
@@ -548,7 +592,7 @@ creating thumbnails. Return a list of image properties."
 ;; chars) summary. After that no limits…
 
 (define *sig/commands*
-  '("help" "create" "make-all" "make-html" "version"))
+  '("help" "create" "make-all" "make-html" "version" "create-template"))
 
 (define (sig/find-command name)
   (if (member name *sig/commands*)
@@ -563,6 +607,26 @@ creating thumbnails. Return a list of image properties."
         ((string? cmd)
          (let ((proc (sig/find-command cmd)))
            (and proc (procedure-documentation proc))))))
+
+(define (main-create-template args)
+  "Create a minimal html template file.
+
+Sig allows to take a custom html file and replace certain placeholders
+with image gallery components:
+
+  ${sig-js}      javascript files
+  ${sig-head}    things that should go in html-head section (css
+                 stylesheets)
+  ${sig-box}     html snippets for the modal dialog (this should be a
+                 direct child of the html-body element)
+  ${sig-links}   the list of links to the images (this should be inside
+                 bootstrap's content div)
+
+By default a very basic html template is used. This command writes the
+default template in a file 'index-template.html for modifying it. Note
+that sig replaces the whole line containing such a variable."
+  (sig/write-file! "index-template.html"
+                   *sig/template*))
 
 (define (main-version args)
   "Display the version and a list of commands."
@@ -587,7 +651,7 @@ The gallery can then be created using 'sig make-all'."
 (define (main-make-all args)
   "Creates the gallery by processing given images.
 
---name gallery-name (-n)   the title of the html file
+--html template (-h)       a html template file to use
 --thumbsize size (-t)      the thumbnail size (default is 150)
 --size size (-s)           the image size (default is 1200)
 --in dir (-i)              the directory with image files (default is
@@ -599,7 +663,7 @@ After image/video files have been processed, the html file is generated."
   (define option-spec
     '((thumbsize (single-char #\t) (value #t))
       (imgsize   (single-char #\s) (value #t))
-      (name      (single-char #\n) (value #t))
+      (html      (single-char #\h) (value #t))
       (overwrite (single-char #\o) (value #f))
       (in        (single-char #\i) (value #t))))
   (let* ((opts  (getopt-long args option-spec))
@@ -608,11 +672,11 @@ After image/video files have been processed, the html file is generated."
                     1200))
          (thsz  (or (string->number (option-ref opts 'thumbsize "150"))
                     150))
-         (gallery (option-ref opts 'name "Gallery"))
+         (template (option-ref opts 'html #f))
          (overwr  (option-ref opts 'overwrite #f))
          (props (sig/make-images! "." dir thsz size overwr)))
     (sig/write-file! "index.html"
-                    (sig/make-html "resources" props gallery))
+                    (sig/gen-html "resources" props template))
     (display "Done.\n")))
 
 (define (main-make-html args)
@@ -621,19 +685,19 @@ After image/video files have been processed, the html file is generated."
 It assumes that image/video files have been processed already and exist
 in 'images' and 'thumbnails', respectively.
 
---name gallery-name (-n)   the title of the html file
---in dir (-i)              the directory with image files (default is
-                           'original')
+--html template (-h)   a html template file to use
+--in dir (-i)          the directory with image files (default is
+                       'original')
 "
   (define option-spec
     '((in        (single-char #\i) (value #t))
-      (name      (single-char #\n) (value #t))))
+      (html      (single-char #\h) (value #t))))
   (let* ((opts  (getopt-long args option-spec))
          (dir   (option-ref opts 'in "original"))
-         (gallery (option-ref opts 'name "Gallery"))
+         (template (option-ref opts 'html #f))
          (props (map (sig/image-properties ".") (sig/scandir dir))))
     (sig/write-file! "index.html"
-                     (sig/make-html (sig/path "resources") props gallery))))
+                     (sig/gen-html (sig/path "resources") props template))))
 
 (define (sig/first-sentence str)
   (let ((idx (and str (string-index str #\.))))
