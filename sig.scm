@@ -562,18 +562,30 @@ is assumed to be the template string."
 
 
 (define (sig/write-file! name contents)
+  "Write a file with NAME containing CONTENTS."
   (format #t "~%Writing file ~a~%" name)
   (when (file-exists? name)
     (delete-file name))
   (with-output-to-file name
     (lambda() (display contents) #t)))
 
-(define (sig/scandir original)
-  (map (lambda (fname) (sig/path original fname))
-       (let ((files (scandir original sig/supported-file?)))
-         (or files '()))))
+(define* (sig/scandir directory #:optional recursive)
+  "Return all supported files in DIRECTORY. If RECURSIVE is #t,
+traverse DIRECTORY recursively."
+  (define (skip path stat result) result)
+  (file-system-fold
+   (lambda (path stat result) (if recursive #t (equal? directory path))) ;; enter?
+   (lambda (path stat result) (if (sig/supported-file? path) (cons path result) result)) ;; leaf
+   skip ;; down
+   skip ;;up
+   skip ;;skip
+   (lambda (path stat errno result) ;; error
+     (sig/errmsg "Error: Skipping ~a: ~a (~d)~%" path (strerror errno) errno)
+     result)
+   '()  ;; initial value
+   directory)) ;; file-name
 
-(define* (sig/make-images! directory #:optional original (thumbsize 150) (imgsize 1200) (overwrite #f))
+(define* (sig/make-images! directory #:optional original (thumbsize 150) (imgsize 1200) (overwrite #f) (recursive #f))
   "Make the gallery by resizing images from directory ORIGINAL and
 creating thumbnails. Return a list of image properties."
   (sig/make-check! directory original)
@@ -581,7 +593,7 @@ creating thumbnails. Return a list of image properties."
   (let* ((orgdir (or original (sig/path directory "original")))
          (dowork (compose (sig/do-file! imgsize thumbsize overwrite)
                           (sig/image-properties directory)))
-         (work (map (sig/as-future dowork) (sig/scandir orgdir))))
+         (work (map (sig/as-future dowork) (sig/scandir orgdir recursive))))
     (map touch work)))
 
 
@@ -651,13 +663,14 @@ The gallery can then be created using 'sig make-all'."
 (define (main-make-all args)
   "Creates the gallery by processing given images.
 
---html template (-h)       a html template file to use
---thumbsize size (-t)      the thumbnail size (default is 150)
---size size (-s)           the image size (default is 1200)
---in dir (-i)              the directory with image files (default is
-                           'original')
---overwrite (-o)           all existing files are overwritten, default
-                           is to only write new files
+--html template (-h)     a html template file to use
+--thumbsize size (-t)    the thumbnail size (default is 150)
+--size size (-s)         the image size (default is 1200)
+--in dir (-i)            the directory with image files (default is
+                         'original')
+--recursive (-r)         traverse DIR recursiveley
+--overwrite (-o)         all existing files are overwritten, default
+                         is to only write new files
 
 After image/video files have been processed, the html file is generated."
   (define option-spec
@@ -665,6 +678,7 @@ After image/video files have been processed, the html file is generated."
       (imgsize   (single-char #\s) (value #t))
       (html      (single-char #\h) (value #t))
       (overwrite (single-char #\o) (value #f))
+      (recursive (single-char #\r) (value #f))
       (in        (single-char #\i) (value #t))))
   (let* ((opts  (getopt-long args option-spec))
          (dir   (option-ref opts 'in "original"))
@@ -672,9 +686,10 @@ After image/video files have been processed, the html file is generated."
                     1200))
          (thsz  (or (string->number (option-ref opts 'thumbsize "150"))
                     150))
+         (rec   (option-ref opts 'recursive #f))
          (template (option-ref opts 'html #f))
          (overwr  (option-ref opts 'overwrite #f))
-         (props (sig/make-images! "." dir thsz size overwr)))
+         (props (sig/make-images! "." dir thsz size overwr rec)))
     (sig/write-file! "index.html"
                     (sig/gen-html "resources" props template))
     (display "Done.\n")))
@@ -688,14 +703,17 @@ in 'images' and 'thumbnails', respectively.
 --html template (-h)   a html template file to use
 --in dir (-i)          the directory with image files (default is
                        'original')
+--recursive (-r)       traverse DIR recursiveley
 "
   (define option-spec
     '((in        (single-char #\i) (value #t))
+      (recursive (single-char #\r) (value #f))
       (html      (single-char #\h) (value #t))))
   (let* ((opts  (getopt-long args option-spec))
          (dir   (option-ref opts 'in "original"))
+         (rec   (option-ref opts 'recursive #f))
          (template (option-ref opts 'html #f))
-         (props (map (sig/image-properties ".") (sig/scandir dir))))
+         (props (map (sig/image-properties ".") (sig/scandir dir rec))))
     (sig/write-file! "index.html"
                      (sig/gen-html (sig/path "resources") props template))))
 
