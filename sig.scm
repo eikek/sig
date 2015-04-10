@@ -78,6 +78,8 @@
 (define (sig/resources key)
   (assq-ref *sig/resource-list* key))
 
+(define *sig/default-template-file* "index-template.html")
+
 (define *sig/template* "<html>
   <head>
     <title>Gallery</title>
@@ -550,28 +552,36 @@ resources. TYPE may be either #:js or #:css."
           (sig/resources type))
      "\n")))
 
+(define (sig/find-template template)
+  "If TEMPLATE is null, return *sig/default-tempalte-file* if it
+exists. Otherwise return *sig/template*. If TEMPLATE is not null,
+return it."
+  (or template
+      (if (file-exists? *sig/default-template-file*)
+          *sig/default-template-file*
+          *sig/template*)))
+
 (define* (sig/gen-html resourcedir props #:optional template)
   "Generates the html file containing the image gallery. PROPS is a
 list of property list each representing a image/video file. Optionally
 a template html file can be specified. If TEMPLATE is not a file, it
 is assumed to be the template string."
-  (let ((templ (or template *sig/template*))
-        (out (sig/path resourcedir ".." "index.html"))
-        (replacements
-         `(("${sig-js}" . ,(sig/make-resource-links resourcedir #:js))
-           ("${sig-head}" . ,(sig/make-resource-links resourcedir #:css))
-           ("${sig-box}" . ,*sig/template-lightbox*)
-           ("${sig-links}" . ,(string-join
-                               (map sig/make-html-snippet (sig/sort-properties props)) "\n")))))
+  (let* ((templ (sig/find-template template))
+         (out (sig/path resourcedir ".." "index.html"))
+         (replacements
+          `(("${sig-js}" . ,(sig/make-resource-links resourcedir #:js))
+            ("${sig-head}" . ,(sig/make-resource-links resourcedir #:css))
+            ("${sig-box}" . ,*sig/template-lightbox*)
+            ("${sig-links}" . ,(string-join
+                                (map sig/make-html-snippet (sig/sort-properties props)) "\n"))))
+         (convert-fn (lambda ()
+                       (sig/html-map-template! (sig/html-map-line! replacements)))))
+    (format #t "~%Use template ~a " templ)
     (with-output-to-string
       (lambda()
         (if (file-exists? templ)
-            (with-input-from-file templ
-              (lambda ()
-                (sig/html-map-template! (sig/html-map-line! replacements))))
-            (with-input-from-string templ
-              (lambda ()
-                (sig/html-map-template! (sig/html-map-line! replacements)))))))))
+            (with-input-from-file templ convert-fn)
+            (with-input-from-string templ convert-fn))))))
 
 
 (define (sig/write-file! name contents)
@@ -648,9 +658,9 @@ with image gallery components:
                  bootstrap's content div)
 
 By default a very basic html template is used. This command writes the
-default template in a file 'index-template.html for modifying it. Note
+default template in a file '*sig/default-template-file for modifying it. Note
 that sig replaces the whole line containing such a variable."
-  (sig/write-file! "index-template.html"
+  (sig/write-file! *sig/default-template-file*
                    *sig/template*))
 
 (define (main-version args)
