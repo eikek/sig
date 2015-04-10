@@ -300,7 +300,7 @@ KEYS."
   #t)
 
 (define (sig/exif-properties filename)
-  "Return properties of FILENAME found by the exiv2 program."
+  "Return properties of FILENAME found by the jhead program."
   (define (split-line line)
     (let ((parts (string-split line #\:)))
       (cons (sig/string->keyword (car parts))
@@ -328,8 +328,21 @@ KEYS."
                        (not (string-null? (cdr pair)))))
                  (sig/select keys data)))))
 
-(define* ((sig/image-properties directory) filename)
-  "Return an alist of properties of the given file."
+(define (sig/make-basename dir filename)
+  "Constructs a base name for FILENAME. If FILENAME is a direct child
+of DIR this is the same as `basename'. Strip DIR from FILENAME which
+is expected to have DIR as prefix and prepend any subdirectory to the
+filename."
+  (let* ((basename (basename filename))
+         (withdirs (substring filename (1+ (string-length dir)))))
+    (if (equal? basename withdirs)
+        basename
+        (string-join (string-split withdirs (string-ref file-name-separator-string 0)) "-"))))
+
+(define* ((sig/image-properties original directory) filename)
+  "Return an alist of properties of the given file. ORIGINAL is the
+directory containing original images, FILENAME is a child of that
+directory. DIRECTORY is the root directory of the gallery."
   (define (make-name ext)
     (string-append (sig/basename-no-extension filename) "." ext))
   (let* ((exif  (sig/exif-properties filename))
@@ -338,7 +351,7 @@ KEYS."
                       ((member ext *sig/supported-videos*) 'video)
                       (#t 'unkown)))
          (video? (eq? media 'video))
-         (basename  (basename filename))
+         (basename  (sig/make-basename original filename))
          (info  (stat filename)))
     (append `((#:file-name . ,filename)
               (#:base-name . ,basename)
@@ -592,7 +605,7 @@ creating thumbnails. Return a list of image properties."
   (format #t "Creating gallery from images in ~a~%" original)
   (let* ((orgdir (or original (sig/path directory "original")))
          (dowork (compose (sig/do-file! imgsize thumbsize overwrite)
-                          (sig/image-properties directory)))
+                          (sig/image-properties orgdir directory)))
          (work (map (sig/as-future dowork) (sig/scandir orgdir recursive))))
     (map touch work)))
 
@@ -713,7 +726,7 @@ in 'images' and 'thumbnails', respectively.
          (dir   (option-ref opts 'in "original"))
          (rec   (option-ref opts 'recursive #f))
          (template (option-ref opts 'html #f))
-         (props (map (sig/image-properties ".") (sig/scandir dir rec))))
+         (props (map (sig/image-properties dir ".") (sig/scandir dir rec))))
     (sig/write-file! "index.html"
                      (sig/gen-html (sig/path "resources") props template))))
 
