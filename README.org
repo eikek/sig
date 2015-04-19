@@ -63,8 +63,8 @@ with image gallery components:
                  bootstrap's content div)
 
 By default a very basic html template is used. This command writes the
-default template in a file 'index-template.html for modifying it. Note
-that sig replaces the whole line containing such a variable.
+default template in a file =*sig/default-template-file*= for modifying
+it. Note that sig replaces the whole line containing such a variable.
 
 ** help
 
@@ -80,6 +80,7 @@ Creates the gallery by processing given images.
 - =--in dir (-i)= the directory with image files (default is
                          'original')
 - =--recursive (-r)= traverse DIR recursiveley
+- =--parallel (-p)= resize images in parallel (using all cores)
 - =--overwrite (-o)= all existing files are overwritten, default
                          is to only write new files
 

@@ -553,7 +553,7 @@ resources. TYPE may be either #:js or #:css."
      "\n")))
 
 (define (sig/find-template template)
-  "If TEMPLATE is null, return *sig/default-tempalte-file* if it
+  "If TEMPLATE is null, return `*sig/default-tempalte-file*' if it
 exists. Otherwise return *sig/template*. If TEMPLATE is not null,
 return it."
   (or template
@@ -608,17 +608,18 @@ traverse DIRECTORY recursively."
    '()  ;; initial value
    directory)) ;; file-name
 
-(define* (sig/make-images! directory #:optional original (thumbsize 150) (imgsize 1200) (overwrite #f) (recursive #f))
+(define* (sig/make-images! directory #:optional original (thumbsize 150) (imgsize 1200) (overwrite #f) (recursive #f) (parallel #f))
   "Make the gallery by resizing images from directory ORIGINAL and
 creating thumbnails. Return a list of image properties."
   (sig/make-check! directory original)
   (format #t "Creating gallery from images in ~a~%" original)
   (let* ((orgdir (or original (sig/path directory "original")))
          (dowork (compose (sig/do-file! imgsize thumbsize overwrite)
-                          (sig/image-properties orgdir directory)))
-         (work (map (sig/as-future dowork) (sig/scandir orgdir recursive))))
-    (map touch work)))
+                          (sig/image-properties orgdir directory))))
 
+    (if parallel
+        (map touch (map (sig/as-future dowork) (sig/scandir orgdir recursive)))
+        (map dowork (sig/scandir orgdir recursive)))))
 
 ;; --- commands
 
@@ -692,6 +693,7 @@ The gallery can then be created using 'sig make-all'."
 --in dir (-i)            the directory with image files (default is
                          'original')
 --recursive (-r)         traverse DIR recursiveley
+--parallel (-p)          resize images in parallel (using all cores)
 --overwrite (-o)         all existing files are overwritten, default
                          is to only write new files
 
@@ -702,6 +704,7 @@ After image/video files have been processed, the html file is generated."
       (html      (single-char #\h) (value #t))
       (overwrite (single-char #\o) (value #f))
       (recursive (single-char #\r) (value #f))
+      (parallel  (single-char #\p) (value #f))
       (in        (single-char #\i) (value #t))))
   (let* ((opts  (getopt-long args option-spec))
          (dir   (option-ref opts 'in "original"))
@@ -710,9 +713,10 @@ After image/video files have been processed, the html file is generated."
          (thsz  (or (string->number (option-ref opts 'thumbsize "150"))
                     150))
          (rec   (option-ref opts 'recursive #f))
+         (par   (option-ref opts 'parallel #f))
          (template (option-ref opts 'html #f))
          (overwr  (option-ref opts 'overwrite #f))
-         (props (sig/make-images! "." dir thsz size overwr rec)))
+         (props (sig/make-images! "." dir thsz size overwr rec par)))
     (sig/write-file! "index.html"
                     (sig/gen-html "resources" props template))
     (display "Done.\n")))

@@ -3,7 +3,7 @@
 (require 's)
 
 (defun sig--text-split (cmd)
-  (let* ((raw (split-string (shell-command-to-string (concat "sig help " cmd)) "\n"))
+  (let* ((raw (split-string (shell-command-to-string (concat "./sig help " cmd)) "\n"))
          (lines (-map (lambda (line)
                         (if (string-match-p "^\\(  \\|--\\)[^ ]+" line)
                             (let ((cols (s-split-up-to "   +" line 2)))
@@ -13,7 +13,7 @@
     lines))
 
 (defun sig--insert-help ()
-  (let ((cmds (sort (cdr (split-string (shell-command-to-string "sig version|tail -n +2")))
+  (let ((cmds (sort (cdr (split-string (shell-command-to-string "./sig version|tail -n +2")))
                     'string-lessp)))
     (-each cmds
       (lambda (c)
