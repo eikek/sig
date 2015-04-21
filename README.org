@@ -19,8 +19,7 @@ Some external programs are needed:
 
 ffmpeg is only used to convert video files.
 
-Then a scheme compiler is needed to run the script. I'm using [[https://www.gnu.org/software/guile/][guile]]
-and I didn't test it with others.
+Then [[https://www.gnu.org/software/guile/][guile]] scheme is needed to run the script.
 
 * Usage
 
