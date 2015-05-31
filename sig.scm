@@ -47,9 +47,14 @@
   '((#:js . ("http://code.jquery.com/jquery-2.1.3.min.js"
              "https://blueimp.github.io/Gallery/js/jquery.blueimp-gallery.min.js"
              "https://raw.githubusercontent.com/blueimp/Bootstrap-Image-Gallery/master/js/bootstrap-image-gallery.min.js"))
-    (#:css . ("http://netdna.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap.min.css"
+    (#:css . ("http://netdna.bootstrapcdn.com/bootstrap/3.3.4/css/bootstrap.min.css"
               "https://raw.githubusercontent.com/blueimp/Gallery/master/css/blueimp-gallery.min.css"
               "https://raw.githubusercontent.com/blueimp/Bootstrap-Image-Gallery/master/css/bootstrap-image-gallery.min.css"))
+    (#:fonts . ("http://netdna.bootstrapcdn.com/bootstrap/3.3.4/fonts/glyphicons-halflings-regular.eot"
+                "http://netdna.bootstrapcdn.com/bootstrap/3.3.4/fonts/glyphicons-halflings-regular.svg"
+                "http://netdna.bootstrapcdn.com/bootstrap/3.3.4/fonts/glyphicons-halflings-regular.ttf"
+                "http://netdna.bootstrapcdn.com/bootstrap/3.3.4/fonts/glyphicons-halflings-regular.woff"
+                "http://netdna.bootstrapcdn.com/bootstrap/3.3.4/fonts/glyphicons-halflings-regular.woff2"))
     (#:img . ("https://raw.githubusercontent.com/blueimp/Gallery/master/img/error.png"
               "https://raw.githubusercontent.com/blueimp/Gallery/master/img/error.svg"
               "https://raw.githubusercontent.com/blueimp/Gallery/master/img/play-pause.png"
@@ -453,9 +458,11 @@ gets javascript and css resources."
   (let* ((resourcedir (sig/path directory "resources"))
          (get-js (sig/get-resource! resourcedir "js"))
          (get-css (sig/get-resource! resourcedir "css"))
+         (get-fonts (sig/get-resource! resourcedir "fonts"))
          (get-img (sig/get-resource! resourcedir "img")))
     (append (map get-js (sig/resources #:js))
             (map get-img (sig/resources #:img))
+            (map get-fonts (sig/resources #:fonts))
             (map get-css (sig/resources #:css)))))
 
 (define* (sig/make-check! directory original #:optional (create-gallery? #t))
@@ -761,7 +768,7 @@ in 'images' and 'thumbnails', respectively.
           (newline)
           (display "This script creates a html file containing an image gallery from\n")
           (display "images of a given folder. Images are resized and thumbnails are\n")
-          (display "created. Video failes are supported, too. They are converted into\n")
+          (display "created. Video files are supported, too. They are converted into\n")
           (display "webm files, which I think can be played with most browsers.\n")
           (newline)
           (display "The script expects a command which in turn may be configured with\n")
