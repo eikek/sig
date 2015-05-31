@@ -8,6 +8,50 @@ files. The images are sorted by their timestamp, where the exif
 date-time value is used if available and otherwise the file last
 modification timestamp.
 
+* COMMENT Emacs setup                                              :noexport:
+
+#+begin_src emacs-lisp :results silent
+  (require 'dash)
+  (require 's)
+
+  (defun sig--text-split (cmd)
+    (let* ((raw (split-string (shell-command-to-string (concat "./sig help " cmd)) "\n"))
+           (lines (-map (lambda (line)
+                          (if (string-match-p "^\\(  \\|--\\)[^ ]+" line)
+                              (let ((cols (s-split-up-to "   +" line 2)))
+                                (concat "- =" (s-trim (car cols)) "= " (cadr cols)))
+                            line))
+                        raw)))
+      lines))
+
+  (defun sig--insert-help ()
+    (let ((cmds (sort (cdr (split-string (shell-command-to-string "./sig version|tail -n +2")))
+                      'string-lessp)))
+      (-each cmds
+        (lambda (c)
+          (insert "** " c "\n\n")
+          (insert (s-join "\n" (sig--text-split c)))
+          (insert "\n")))))
+
+  (defun sig--remove-help ()
+    (search-forward-regexp "^# -- generated doc")
+    (forward-line 1)
+    (let ((start (point)))
+      (search-forward-regexp "^\\* .+")
+      (forward-line -1)
+      (delete-region start (point))))
+
+  (defun sig-update-readme ()
+    (interactive)
+    (save-excursion
+      (goto-char (point-min))
+      (unless (and (eq major-mode 'org-mode)
+                   (looking-at "^#\\+TITLE: simple image gallery$"))
+        (user-error "Not the correct file."))
+      (sig--remove-help)
+      (sig--insert-help)))
+#+end_src
+
 * Setup
 
 Some external programs are needed:
@@ -62,8 +106,8 @@ with image gallery components:
                  bootstrap's content div)
 
 By default a very basic html template is used. This command writes the
-default template in a file =*sig/default-template-file*= for modifying
-it. Note that sig replaces the whole line containing such a variable.
+default template in a file '*sig/default-template-file for modifying it. Note
+that sig replaces the whole line containing such a variable.
 
 ** help
 
@@ -82,6 +126,7 @@ Creates the gallery by processing given images.
 - =--parallel (-p)= resize images in parallel (using all cores)
 - =--overwrite (-o)= all existing files are overwritten, default
                          is to only write new files
+- =--download-links (-d)= Create download links to each original file
 
 After image/video files have been processed, the html file is generated.
 
@@ -96,6 +141,8 @@ in 'images' and 'thumbnails', respectively.
 - =--in dir (-i)= the directory with image files (default is
                        'original')
 - =--recursive (-r)= traverse DIR recursiveley
+- =--download-links (-d)  Create download links to each original file=
+
 
 
 ** version
@@ -105,7 +152,6 @@ Display the version and a list of commands.
 
 * Not implemented
 
-- download button for original image (only if relative path)
 - make external commands configurable (to add other switches etc)
 - package command (create zip file)
 

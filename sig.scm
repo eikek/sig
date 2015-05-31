@@ -85,6 +85,26 @@
 
 (define *sig/default-template-file* "index-template.html")
 
+(define *sig/more-css* ".blueimp-gallery > .download {
+    position: absolute;
+    top: 15px;
+    right: 45px;
+    display: none;
+  }
+  .blueimp-gallery-controls > .download {
+    display: block;
+  }")
+
+(define *sig/more-js* "
+  $('#blueimp-gallery').on('slide', function(event, index, slide) {
+    var ref = $(this).data('gallery').list[index].getAttribute('data-download'),
+        node = $(event.target).find('.download');
+    if (ref) {
+      node.attr('href', ref);
+    }
+  });
+")
+
 (define *sig/template* "<html>
   <head>
     <title>Gallery</title>
@@ -102,13 +122,21 @@
   </body>
 </html> ")
 
-(define *sig/template-lightbox*
-  "<div id=\"blueimp-gallery\" class=\"blueimp-gallery\" data-use-bootstrap-modal=\"false\">
+(define (sig/template-lightbox download-links?)
+  (string-append
+   "<div id=\"blueimp-gallery\" class=\"blueimp-gallery\" data-use-bootstrap-modal=\"false\">
   <!-- The container for the modal slides -->
   <div class=\"slides\"></div>
   <!-- Controls for the borderless lightbox -->
   <h3 class=\"title\"></h3>
-  <a class=\"prev\">&#8249;</a>
+"
+   (if download-links?
+       " <a class=\"download btn btn-primary\" download>
+    <i class=\"glyphicon glyphicon-download\"></i>
+    Download
+  </a>" "")
+
+   "<a class=\"prev\">&#8249;</a>
   <a class=\"next\">&#8250;</a>
   <a class=\"close\">&times;</a>
   <a class=\"play-pause\"></a>
@@ -135,7 +163,7 @@
       </div>
     </div>
   </div>
-</div>")
+</div>"))
 
 (define (sig/version)
   (display "sig 0.1.0a"))
@@ -514,17 +542,19 @@ gets javascript and css resources."
             (or res "n.a.")
             name)))
 
-(define (sig/make-html-snippet props)
+(define* ((sig/make-html-snippet download-links?) props)
   (if (eq? 'video (assq-ref props #:media))
-    (format #f "<a href=\"~a\" title=\"~a\" type=\"~a\" data-poster=\"~a\" data-gallery><img src=\"~a\"></a>"
+    (format #f "<a href=\"~a\" title=\"~a\" type=\"~a\" data-download=\"~a\" data-poster=\"~a\" data-gallery><img src=\"~a\"></a>"
             (assq-ref props #:image)
             (sig/make-image-title props)
             "video/webm"
+            (if download-links? (assq-ref props #:file-name) "")
             (assq-ref props #:thumbnail)
             (assq-ref props #:thumbnail))
-    (format #f "<a href=\"~a\" title=\"~a\" data-gallery>\n<img src=\"~a\" alt=\"~a\">\n</a>"
+    (format #f "<a href=\"~a\" title=\"~a\" data-download=\"~a\" data-gallery>\n<img src=\"~a\" alt=\"~a\">\n</a>"
             (assq-ref props #:image)
             (sig/make-image-title props)
+            (if download-links? (assq-ref props #:file-name) "")
             (assq-ref props #:thumbnail)
             (sig/make-image-title props))))
 
@@ -568,7 +598,19 @@ return it."
           *sig/default-template-file*
           *sig/template*)))
 
-(define* (sig/gen-html resourcedir props #:optional template)
+(define (sig/make-css resourcedir)
+  (string-append (sig/make-resource-links resourcedir #:css)
+                 "\n<style type=\"text/css\">"
+                 *sig/more-css*
+                 "</style>\n"))
+
+(define (sig/make-js resourcedir)
+  (string-append (sig/make-resource-links resourcedir #:js)
+                 "\n<script type=\"text/javascript\">"
+                 *sig/more-js*
+                 "</script>\n"))
+
+(define* (sig/gen-html resourcedir props #:optional template download-links?)
   "Generates the html file containing the image gallery. PROPS is a
 list of property list each representing a image/video file. Optionally
 a template html file can be specified. If TEMPLATE is not a file, it
@@ -576,11 +618,11 @@ is assumed to be the template string."
   (let* ((templ (sig/find-template template))
          (out (sig/path resourcedir ".." "index.html"))
          (replacements
-          `(("${sig-js}" . ,(sig/make-resource-links resourcedir #:js))
-            ("${sig-head}" . ,(sig/make-resource-links resourcedir #:css))
-            ("${sig-box}" . ,*sig/template-lightbox*)
+          `(("${sig-js}" . ,(sig/make-js resourcedir))
+            ("${sig-head}" . ,(sig/make-css resourcedir))
+            ("${sig-box}" . ,(sig/template-lightbox download-links?))
             ("${sig-links}" . ,(string-join
-                                (map sig/make-html-snippet (sig/sort-properties props)) "\n"))))
+                                (map (sig/make-html-snippet download-links?) (sig/sort-properties props)) "\n"))))
          (convert-fn (lambda ()
                        (sig/html-map-template! (sig/html-map-line! replacements)))))
     (format #t "~%Use template ~a " templ)
@@ -589,7 +631,6 @@ is assumed to be the template string."
         (if (file-exists? templ)
             (with-input-from-file templ convert-fn)
             (with-input-from-string templ convert-fn))))))
-
 
 (define (sig/write-file! name contents)
   "Write a file with NAME containing CONTENTS."
@@ -703,6 +744,7 @@ The gallery can then be created using 'sig make-all'."
 --parallel (-p)          resize images in parallel (using all cores)
 --overwrite (-o)         all existing files are overwritten, default
                          is to only write new files
+--download-links (-d)    Create download links to each original file
 
 After image/video files have been processed, the html file is generated."
   (define option-spec
@@ -712,6 +754,7 @@ After image/video files have been processed, the html file is generated."
       (overwrite (single-char #\o) (value #f))
       (recursive (single-char #\r) (value #f))
       (parallel  (single-char #\p) (value #f))
+      (download-links (single-char #\d) (value #f))
       (in        (single-char #\i) (value #t))))
   (let* ((opts  (getopt-long args option-spec))
          (dir   (option-ref opts 'in "original"))
@@ -722,10 +765,11 @@ After image/video files have been processed, the html file is generated."
          (rec   (option-ref opts 'recursive #f))
          (par   (option-ref opts 'parallel #f))
          (template (option-ref opts 'html #f))
+         (make-links (option-ref opts 'download-links #t))
          (overwr  (option-ref opts 'overwrite #f))
          (props (sig/make-images! "." dir thsz size overwr rec par)))
     (sig/write-file! "index.html"
-                    (sig/gen-html "resources" props template))
+                    (sig/gen-html "resources" props template make-links))
     (display "Done.\n")))
 
 (define (main-make-html args)
@@ -738,18 +782,22 @@ in 'images' and 'thumbnails', respectively.
 --in dir (-i)          the directory with image files (default is
                        'original')
 --recursive (-r)       traverse DIR recursiveley
+--download-links (-d)  Create download links to each original file
+
 "
   (define option-spec
     '((in        (single-char #\i) (value #t))
       (recursive (single-char #\r) (value #f))
+      (download-links (single-char #\d) (value #f))
       (html      (single-char #\h) (value #t))))
   (let* ((opts  (getopt-long args option-spec))
          (dir   (option-ref opts 'in "original"))
          (rec   (option-ref opts 'recursive #f))
+         (make-links (option-ref opts 'download-links #f))
          (template (option-ref opts 'html #f))
          (props (map (sig/image-properties dir ".") (sig/scandir dir rec))))
     (sig/write-file! "index.html"
-                     (sig/gen-html (sig/path "resources") props template))))
+                     (sig/gen-html (sig/path "resources") props template make-links))))
 
 (define (sig/first-sentence str)
   (let ((idx (and str (string-index str #\.))))
